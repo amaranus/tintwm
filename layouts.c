@@ -36,10 +36,27 @@ verticle(void)
 	}
 }
 
+// Yeni layout fonksiyonu
+static void
+horizontal(void)
+{
+	const uint16_t n = nclients();
+	if (!n) return;
+
+	int i = -1;
+	for (struct client *c = master; c; c = c->next, i++) {
+		if (i < 0)
+			move_resize(c, 0, 0, sw, n == 1 ? sh : sh / 2);
+		else
+			move_resize(c, i * (sw / (n - 1)), sh / 2, sw / (n - 1), sh / 2);
+	}
+}
+
 void
 arrange(void)
 {
 	switch (layout) {
 	case VERTICLE: verticle(); break;
+	case HORIZONTAL: horizontal(); break;
 	}
 }

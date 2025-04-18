@@ -74,6 +74,65 @@ focus_client(struct client *c)
 	raise_window(c->window);
 }
 
+void
+close_client(struct client *c)
+{
+	if (!c) return;
+
+	xcb_intern_atom_cookie_t protocols_cookie = xcb_intern_atom(dpy, 0, strlen("WM_PROTOCOLS"), "WM_PROTOCOLS");
+	xcb_intern_atom_reply_t *protocols_reply = xcb_intern_atom_reply(dpy, protocols_cookie, NULL);
+	if (!protocols_reply) return;
+
+	xcb_intern_atom_cookie_t delete_cookie = xcb_intern_atom(dpy, 0, strlen("WM_DELETE_WINDOW"), "WM_DELETE_WINDOW");
+	xcb_intern_atom_reply_t *delete_reply = xcb_intern_atom_reply(dpy, delete_cookie, NULL);
+	if (!delete_reply) {
+		free(protocols_reply);
+		return;
+	}
+
+	xcb_atom_t wm_protocols = protocols_reply->atom;
+	xcb_atom_t wm_delete = delete_reply->atom;
+
+	free(protocols_reply);
+	free(delete_reply);
+
+	// Check if the window supports WM_DELETE_WINDOW
+	xcb_get_property_cookie_t prop_cookie = xcb_get_property(
+		dpy, 0, c->window, wm_protocols, XCB_ATOM_ATOM, 0, 1024);
+	xcb_get_property_reply_t *prop_reply = xcb_get_property_reply(dpy, prop_cookie, NULL);
+	if (!prop_reply) return;
+
+	bool supports_delete = false;
+	if (prop_reply->type == XCB_ATOM_ATOM) {
+		xcb_atom_t *atoms = (xcb_atom_t *) xcb_get_property_value(prop_reply);
+		int len = xcb_get_property_value_length(prop_reply) / sizeof(xcb_atom_t);
+		for (int i = 0; i < len; i++) {
+			if (atoms[i] == wm_delete) {
+				supports_delete = true;
+				break;
+			}
+		}
+	}
+	free(prop_reply);
+
+	if (supports_delete) {
+		xcb_client_message_event_t ev = {
+			.response_type = XCB_CLIENT_MESSAGE,
+			.format = 32,
+			.sequence = 0,
+			.window = c->window,
+			.type = wm_protocols,
+			.data.data32 = { wm_delete, XCB_CURRENT_TIME, 0, 0, 0 }
+		};
+		xcb_send_event(dpy, 0, c->window, XCB_EVENT_MASK_NO_EVENT, (const char *)&ev);
+		xcb_flush(dpy);
+	} else {
+		// fallback: forcibly kill if WM_DELETE is not supported
+		xcb_kill_client(dpy, c->window);
+		xcb_flush(dpy);
+	}
+}
+
 static void
 activate_wm(void)
 {
