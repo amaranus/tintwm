@@ -52,11 +52,19 @@ horizontal(void)
 	}
 }
 
+static void
+fullscreen_float(void)
+{
+	for (struct client *c = master; c; c = c->next)
+		move_resize(c, 0, 0, sw, sh);
+}
+
 void
 arrange(void)
 {
 	switch (layout) {
 	case VERTICLE: verticle(); break;
 	case HORIZONTAL: horizontal(); break;
+	case FULLSCREEN_FLOAT: fullscreen_float(); break;
 	}
 }

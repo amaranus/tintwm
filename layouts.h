@@ -3,7 +3,7 @@
 
 #include "tintwm.h"
 
-enum layout { VERTICLE, HORIZONTAL };
+enum layout { VERTICLE, HORIZONTAL, FULLSCREEN_FLOAT };
 extern enum layout layout;
 
 void arrange(void);

@@ -15,14 +15,21 @@
 
 static xcb_key_symbols_t *keysyms;
 
-void grab_keys(void) {
-  struct key {
+void grab_keys(void)
+{
+  struct key
+  {
     uint16_t mod;
     xcb_keysym_t key;
   };
-  struct key keys[] = {
-      {WIN | SHIFT, XK_q}, {WIN, XK_d},   {WIN, XK_q},
-      {WIN, XK_space},     {ALT, XK_Tab},
+  struct key keys[] = {      
+/*    Ön tuş                      tuş        */
+      { WIN | SHIFT,              XK_q },
+      { WIN,                      XK_d },
+      { WIN,                      XK_q },
+      { WIN,                      XK_r },
+      { WIN,                  XK_space },
+      { ALT,                    XK_Tab },
   };
 
   keysyms = xcb_key_symbols_alloc(dpy);
@@ -30,7 +37,8 @@ void grab_keys(void) {
     DIE("cannot allocate keysyms\n");
 
 #define LENGTH(x) (sizeof(x) / sizeof(*x))
-  for (size_t i = 0; i < LENGTH(keys); i++) {
+  for (size_t i = 0; i < LENGTH(keys); i++)
+  {
     xcb_keycode_t *code = xcb_key_symbols_get_keycode(keysyms, keys[i].key);
     if (!code)
       continue;
@@ -42,41 +50,48 @@ void grab_keys(void) {
   }
 }
 
-void key_press(xcb_key_press_event_t *e) {
+void key_press(xcb_key_press_event_t *e)
+{
   const xcb_keysym_t key = xcb_key_symbols_get_keysym(keysyms, e->detail, 0);
 
-  switch (e->state) { // modifier
+  switch (e->state)
+  { // modifier
   case WIN | SHIFT:
-    switch (key) {
+    switch (key)
+    {
     case XK_q:
       running = false;
       break;
     }
     break;
   case WIN:
-    switch (key) {
+    switch (key)
+    {
     case XK_d:
       system("dmenu_run -l 10 -p 'Uygulama seç:' -fn 'Terminus-13' -nb "
              "'#353535' -sb '#0a0a0a'");
       break;
     case XK_space:
-      if (layout == HORIZONTAL)
-        layout = VERTICLE;
-      else
-        layout = HORIZONTAL;
+      layout = (layout + 1) % 3;
       arrange();
       break;
     case XK_q:
       if (focus)
         close_client(focus);
+      break;    
+    case XK_r:
+        system("rofi -combi-modi window,drun,ssh -show combi -show-icons");
       break;
     }
     break;
   case ALT:
-    switch (key) {
+    switch (key)
+    {
     case XK_Tab:
-      if (focus->focus_next)
+      if (focus && focus->focus_next)
         focus_client(focus->focus_next);
+      else
+        focus_client(master);
       break;
     }
     break;
