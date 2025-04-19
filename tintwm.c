@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <xcb/xcb.h>
+#include <xcb/xcb_ewmh.h>
 
 #include "tintwm.h"
 #include "keys.h"
@@ -16,6 +17,28 @@ xcb_screen_t *screen;
 struct client *focus, *master;
 bool running = true;
 uint16_t sw, sh;
+xcb_ewmh_connection_t *ewmh;
+
+
+void
+update_client_list(void)
+{
+    // Pencere sayısını say
+    int count = 0;
+    for (struct client *c = master; c; c = c->next)
+        count++;
+    
+    // Pencere ID'lerini bir diziye kopyala
+    xcb_window_t *windows = malloc(sizeof(xcb_window_t) * count);
+    int i = 0;
+    for (struct client *c = master; c; c = c->next)
+        windows[i++] = c->window;
+    
+    // _NET_CLIENT_LIST'i güncelle
+    xcb_ewmh_set_client_list(ewmh, 0, count, windows);
+    
+    free(windows);
+}
 
 void
 move_resize(struct client *c, int16_t x, int16_t y, uint16_t w, uint16_t h)
@@ -72,6 +95,9 @@ focus_client(struct client *c)
 	if (!c) return;
 	add_focus(c);
 	raise_window(c->window);
+
+	// Aktif pencereyi EWMH üzerinden bildir
+    xcb_ewmh_set_active_window(ewmh, 0, c->window);
 }
 
 void
@@ -176,6 +202,28 @@ setup(void)
 	activate_wm();
 	grab_keys();
 	grab_buttons();
+
+	// EWMH başlatma
+	ewmh = calloc(1, sizeof(xcb_ewmh_connection_t));
+	xcb_intern_atom_cookie_t *cookie = xcb_ewmh_init_atoms(dpy, ewmh);
+	if (!xcb_ewmh_init_atoms_replies(ewmh, cookie, NULL)) {
+		DIE("EWMH atomlarını başlatamadı\n");
+	}
+
+	// Pencere yöneticisi olduğumuzu belirt
+	xcb_ewmh_set_wm_name(ewmh, screen->root, strlen("tintwm"), "tintwm");
+	xcb_ewmh_set_supporting_wm_check(ewmh, screen->root, screen->root);
+
+	// Desteklenen özellikleri belirt
+	xcb_atom_t supported[] = {
+		ewmh->_NET_SUPPORTED,
+		ewmh->_NET_WM_NAME,
+		ewmh->_NET_WM_WINDOW_TYPE,
+		ewmh->_NET_ACTIVE_WINDOW,
+		ewmh->_NET_SUPPORTING_WM_CHECK,
+		ewmh->_NET_CLIENT_LIST
+	};
+	xcb_ewmh_set_supported(ewmh, 0, sizeof(supported)/sizeof(xcb_atom_t), supported);
 }
 
 static struct client *
@@ -215,6 +263,7 @@ map_request(xcb_map_request_event_t *e)
 	arrange();
 	xcb_map_window(dpy, e->window);
 	raise_window(e->window);
+	update_client_list();
 }
 
 static void
@@ -279,35 +328,47 @@ destroy_notify(xcb_destroy_notify_event_t *e)
 
 	arrange();
 	focus_client(focus);
+	update_client_list(); 
 }
 
 static void
 run(void)
 {
-	while (running) {
-		xcb_flush(dpy);
-		xcb_generic_event_t *ev = xcb_wait_for_event(dpy);
-		switch (ev->response_type & ~0x80) {
-		case XCB_KEY_PRESS:
-			key_press((xcb_key_press_event_t *) ev);
-			break;
-		case XCB_BUTTON_PRESS:
-			button_press((xcb_button_press_event_t *) ev);
-			break;
-		case XCB_CONFIGURE_REQUEST:
-			configure_request((xcb_configure_request_event_t *) ev);
-			break;
-		case XCB_MAP_REQUEST:
-			map_request((xcb_map_request_event_t *) ev);
-			break;
-		case XCB_DESTROY_NOTIFY:
-			destroy_notify((xcb_destroy_notify_event_t *) ev);
-			break;
-		}
-		free(ev);
-		if (xcb_connection_has_error(dpy))
-			DIE("the server closed the connection\n");
-	}
+    while (running) {
+        xcb_flush(dpy);
+        xcb_generic_event_t *ev = xcb_wait_for_event(dpy);
+        switch (ev->response_type & ~0x80) {
+            case XCB_KEY_PRESS:
+                key_press((xcb_key_press_event_t *) ev);
+                break;
+            case XCB_BUTTON_PRESS:
+                button_press((xcb_button_press_event_t *) ev);
+                break;
+            case XCB_CONFIGURE_REQUEST:
+                configure_request((xcb_configure_request_event_t *) ev);
+                break;
+            case XCB_MAP_REQUEST:
+                map_request((xcb_map_request_event_t *) ev);
+                break;
+            case XCB_DESTROY_NOTIFY:
+                destroy_notify((xcb_destroy_notify_event_t *) ev);
+                break;
+            case XCB_CLIENT_MESSAGE: {
+                xcb_client_message_event_t *e = (xcb_client_message_event_t *)ev;
+                if (e->type == ewmh->_NET_ACTIVE_WINDOW) {
+                    struct client *c = find_client(e->window);
+                    if (c) {
+                        focus_client(c);
+                        arrange();
+                    }
+                }
+                break;
+            }
+        }
+        free(ev);
+        if (xcb_connection_has_error(dpy))
+            DIE("the server closed the connection\n");
+    }
 }
 
 int
@@ -315,5 +376,8 @@ main(void)
 {
 	setup();
 	run();
+	xcb_ewmh_connection_wipe(ewmh);
+	free(ewmh);
+	xcb_disconnect(dpy);
 	return EXIT_SUCCESS;
 }

@@ -7,6 +7,7 @@
 #include <stdbool.h>
 
 #include <xcb/xcb.h>
+#include <xcb/xcb_ewmh.h> 
 
 #include "layouts.h"
 
@@ -27,9 +28,11 @@ extern xcb_screen_t *screen;
 extern struct client *focus, *master;
 extern bool running;
 extern uint16_t sw, sh;
+extern xcb_ewmh_connection_t *ewmh;
 
 // General utilities
 void move_resize(struct client *c, int16_t x, int16_t y, uint16_t w, uint16_t h);
 void focus_client(struct client *c);
 void close_client(struct client *c);
+void update_client_list(void);
 #endif

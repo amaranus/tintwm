@@ -1,7 +1,7 @@
 OPTIONS = -O3 -Wall -Werror -pedantic
 
 tintwm: tintwm.o keys.o layouts.o
-	$(CC) $(OPTIONS) -o $@ $^ -lxcb -lxcb-keysyms
+	$(CC) $(OPTIONS) -o $@ $^ -lxcb -lxcb-keysyms -lxcb-ewmh
 
 tintwm.o: tintwm.c tintwm.h keys.h layouts.h
 	$(CC) $(OPTIONS) -c $<
