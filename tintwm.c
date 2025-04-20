@@ -7,6 +7,8 @@
 
 #include <xcb/xcb.h>
 #include <xcb/xcb_ewmh.h>
+#include <xcb/xcb_cursor.h>
+#include <xcb/xcb_icccm.h>  
 
 #include "tintwm.h"
 #include "keys.h"
@@ -14,6 +16,7 @@
 
 xcb_connection_t *dpy;
 xcb_screen_t *screen;
+xcb_cursor_context_t *ctx;
 struct client *focus, *master;
 bool running = true;
 uint16_t sw, sh;
@@ -203,6 +206,19 @@ setup(void)
 	grab_keys();
 	grab_buttons();
 
+	grab_buttons();
+
+    // Cursor ayarla    
+    if (xcb_cursor_context_new(dpy, screen, &ctx) >= 0) {
+        xcb_cursor_t cursor = xcb_cursor_load_cursor(ctx, "default");
+        if (cursor != XCB_CURSOR_NONE) {
+            uint32_t values[] = { cursor };
+            xcb_change_window_attributes(dpy, screen->root, XCB_CW_CURSOR, values);
+            xcb_free_cursor(dpy, cursor);
+        }
+        xcb_cursor_context_free(ctx);
+    }
+
 	// EWMH başlatma
 	ewmh = calloc(1, sizeof(xcb_ewmh_connection_t));
 	xcb_intern_atom_cookie_t *cookie = xcb_ewmh_init_atoms(dpy, ewmh);
@@ -259,6 +275,21 @@ static void
 map_request(xcb_map_request_event_t *e)
 {
 	struct client *c = add_window(e->window);
+
+	    // WM_HINTS'i kontrol et
+		xcb_icccm_wm_hints_t hints;
+		xcb_get_property_cookie_t cookie = xcb_icccm_get_wm_hints(dpy, e->window);
+		if (xcb_icccm_get_wm_hints_reply(dpy, cookie, &hints, NULL)) {
+			// Input focus kontrolü
+			if (hints.flags & XCB_ICCCM_WM_HINT_INPUT) {
+				if (!hints.input) {
+					// Pencere input istemiyor, varsayılan cursor kullan
+					uint32_t values[] = { XCB_NONE };
+					xcb_change_window_attributes(dpy, e->window, XCB_CW_CURSOR, values);
+				}
+			}
+		}
+		
 	add_focus(c);
 	arrange();
 	xcb_map_window(dpy, e->window);

@@ -4,6 +4,7 @@
 
 #include <X11/keysym.h>
 #include <xcb/xcb_keysyms.h>
+#include <X11/XF86keysym.h>
 
 #include "keys.h"
 #include "tintwm.h"
@@ -30,6 +31,9 @@ void grab_keys(void)
       { WIN,                      XK_r },
       { WIN,                  XK_space },
       { ALT,                    XK_Tab },
+      { 0,     XF86XK_AudioRaiseVolume },
+      { 0,     XF86XK_AudioLowerVolume },
+      { 0,            XF86XK_AudioMute },
   };
 
   keysyms = xcb_key_symbols_alloc(dpy);
@@ -92,6 +96,19 @@ void key_press(xcb_key_press_event_t *e)
         focus_client(focus->focus_next);
       else
         focus_client(master);
+      break;
+    }
+    break;
+  case 0: // modifier yok
+    switch (key) {
+    case XF86XK_AudioRaiseVolume:
+      system("amixer -q set Master 5%+");
+      break;
+    case XF86XK_AudioLowerVolume:
+      system("amixer -q set Master 5%-");
+      break;
+    case XF86XK_AudioMute:
+      system("amixer -q set Master toggle");
       break;
     }
     break;
