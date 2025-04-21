@@ -157,7 +157,9 @@ void close_client(struct client *c) {
 }
 
 static void activate_wm(void) {
-    const uint32_t event_mask = XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY;
+    const uint32_t event_mask = XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | 
+                                XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY |
+                                XCB_EVENT_MASK_ENTER_WINDOW; // Fare takibi için eklenmiştir
     xcb_void_cookie_t attr = xcb_change_window_attributes_checked(dpy, screen->root, XCB_CW_EVENT_MASK, &event_mask);
     xcb_generic_error_t *err = xcb_request_check(dpy, attr);
     if (err) DIE("Another window manager is running\n");
@@ -235,7 +237,21 @@ static struct client *add_window(xcb_window_t window) {
         for (; last->next; last = last->next);
         last->next = c;
     }
+    // Enter notify eventini aktif et
+    uint32_t values[] = { XCB_EVENT_MASK_ENTER_WINDOW };
+    xcb_change_window_attributes(dpy, window, XCB_CW_EVENT_MASK, values);
+
     return c;
+}
+
+static void enter_notify(xcb_enter_notify_event_t *e) {
+    // Eğer olay modifier tuşlarıyla birlikte geliyorsa işleme
+    if (e->mode != XCB_NOTIFY_MODE_NORMAL) return;
+
+    struct client *c = find_client(e->event);
+    if (c && c != focus) {
+        focus_client(c);
+    }
 }
 
 static void map_request(xcb_map_request_event_t *e) {
@@ -355,6 +371,9 @@ static void run(void) {
             }
             break;
         }
+        case XCB_ENTER_NOTIFY: 
+            enter_notify((xcb_enter_notify_event_t *)ev); 
+            break;
         }
         free(ev);
         if (xcb_connection_has_error(dpy)) DIE("Server closed connection\n");
